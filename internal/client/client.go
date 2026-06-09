@@ -11,6 +11,7 @@ import (
 	authv1 "github.com/malvinpratama/iam-go-contracts/gen/auth/v1"
 	userv1 "github.com/malvinpratama/iam-go-contracts/gen/user/v1"
 	"github.com/malvinpratama/iam-go-libs/grpcutil"
+	"github.com/malvinpratama/iam-go-libs/obs"
 )
 
 // tokenInjector appends the shared internal token to every outgoing call so the
@@ -39,6 +40,7 @@ func Dial(authAddr, userAddr, internalToken string) (*Clients, error) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithUnaryInterceptor(tokenInjector(internalToken)),
 	}
+	opts = append(opts, obs.ClientDialOptions()...) // export client spans + propagate trace context
 
 	authConn, err := grpc.NewClient(authAddr, opts...)
 	if err != nil {

@@ -3,11 +3,14 @@ package router
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -19,10 +22,14 @@ import (
 )
 
 // New builds the gin engine with all routes registered.
-func New(clients *client.Clients) *gin.Engine {
+func New(clients *client.Clients, log *slog.Logger) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
-	r.Use(middleware.BodyLimit(1 << 20)) // 1 MiB max request body (DoS guard)
+	r.Use(otelgin.Middleware("gateway"))   // trace each request + extract context
+	r.Use(middleware.RequestID())          // correlation id
+	r.Use(middleware.Observability(log))   // metrics + access log
+	r.Use(middleware.BodyLimit(1 << 20))   // 1 MiB max request body (DoS guard)
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	authn := middleware.NewAuthenticator(clients.Auth)
 	h := &handlers{c: clients}
@@ -478,9 +485,11 @@ func (h *handlers) revokeRole(c *gin.Context) {
 
 // ── helpers ─────────────────────────────────────────────────
 
-// forward propagates the caller identity to downstream gRPC services.
+// forward propagates the caller identity and correlation id to downstream gRPC
+// services (trace context flows automatically via the otel client handler).
 func forward(c *gin.Context) context.Context {
-	return grpcutil.Inject(c.Request.Context(), middleware.IdentityOf(c))
+	ctx := grpcutil.Inject(c.Request.Context(), middleware.IdentityOf(c))
+	return grpcutil.WithRequestID(ctx, c.GetString(middleware.RequestIDKey))
 }
 
 func tokenPairJSON(tp *authv1.TokenPair) gin.H {

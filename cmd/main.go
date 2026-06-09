@@ -12,6 +12,7 @@ import (
 
 	"github.com/malvinpratama/iam-go-libs/config"
 	"github.com/malvinpratama/iam-go-libs/logger"
+	"github.com/malvinpratama/iam-go-libs/obs"
 	"github.com/malvinpratama/iam-go-gateway/internal/client"
 	"github.com/malvinpratama/iam-go-gateway/internal/router"
 )
@@ -29,6 +30,13 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	shutdownTracer, err := obs.InitTracer(ctx, "gateway", config.OTLPEndpoint())
+	if err != nil {
+		log.Error("init tracer", "err", err)
+		return
+	}
+	defer func() { _ = shutdownTracer(context.Background()) }()
+
 	authAddr := config.Getenv("AUTH_GRPC_ADDR", "localhost:50051")
 	userAddr := config.Getenv("USER_GRPC_ADDR", "localhost:50052")
 	port := config.Getenv("GATEWAY_HTTP_PORT", "8080")
@@ -42,7 +50,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              ":" + port,
-		Handler:           router.New(clients),
+		Handler:           router.New(clients, log),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
