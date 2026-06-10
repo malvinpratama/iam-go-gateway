@@ -280,6 +280,19 @@ func (h *handlers) registerClient(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"client_id": res.GetClientId(), "client_secret": res.GetClientSecret()})
 }
 
+// oidcLogout is the OIDC RP-initiated end-session endpoint: it clears the
+// browser session cookie and returns to post_logout_redirect_uri.
+func (h *handlers) oidcLogout(c *gin.Context) {
+	secure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(sessionCookie, "", -1, "/", "", secure, true)
+	dest := c.Query("post_logout_redirect_uri")
+	if !strings.HasPrefix(dest, "https://") && !strings.HasPrefix(dest, "http://") {
+		dest = "/" // only allow absolute http(s) targets
+	}
+	c.Redirect(http.StatusFound, dest)
+}
+
 // ── helpers ─────────────────────────────────────────────────
 
 func scopesCovered(granted, requested []string) bool {

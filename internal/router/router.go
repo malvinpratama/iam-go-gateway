@@ -55,6 +55,7 @@ func New(clients *client.Clients, log *slog.Logger) *gin.Engine {
 	r.POST("/authorize/login", h.authorizeLogin)
 	r.POST("/authorize/consent", h.authorizeConsent)
 	r.POST("/token", h.token)
+	r.GET("/logout", h.oidcLogout) // OIDC RP-initiated end-session
 
 	// Public auth endpoints — rate limited per IP to slow brute-force.
 	// Tunable via env (defaults 60 req / 60s); lower it (e.g. 5-10/min) in production.
