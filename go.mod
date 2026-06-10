@@ -5,7 +5,7 @@ go 1.26
 require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
-	github.com/malvinpratama/iam-go-contracts v0.5.0
+	github.com/malvinpratama/iam-go-contracts v0.6.0
 	github.com/malvinpratama/iam-go-libs v0.5.0
 	github.com/prometheus/client_golang v1.23.2
 	go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin v0.69.0

@@ -50,6 +50,11 @@ func New(clients *client.Clients, log *slog.Logger) *gin.Engine {
 	r.GET("/.well-known/openid-configuration", h.oidcDiscovery)
 	r.GET("/.well-known/jwks.json", h.jwks)
 
+	// OIDC Authorization Code flow (browser): login form, consent, code issuance.
+	r.GET("/authorize", h.authorize)
+	r.POST("/authorize/login", h.authorizeLogin)
+	r.POST("/authorize/consent", h.authorizeConsent)
+
 	// Public auth endpoints — rate limited per IP to slow brute-force.
 	// Tunable via env (defaults 60 req / 60s); lower it (e.g. 5-10/min) in production.
 	authLimit := middleware.NewRateLimiter(
