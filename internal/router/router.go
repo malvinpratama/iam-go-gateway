@@ -57,12 +57,14 @@ func New(clients *client.Clients, log *slog.Logger) *gin.Engine {
 	r.POST("/token", h.token)
 	r.GET("/logout", h.oidcLogout) // OIDC RP-initiated end-session
 
-	// Public auth endpoints — rate limited per IP to slow brute-force.
-	// Tunable via env (defaults 60 req / 60s); lower it (e.g. 5-10/min) in production.
-	authLimit := middleware.NewRateLimiter(
+	// Public auth endpoints — rate limited per IP to slow brute-force. Redis-backed
+	// (shared across replicas) when REDIS_URL is set, else in-memory. Tunable via
+	// env (defaults 60 req / 60s); 0 disables.
+	authLimit := middleware.NewAuthLimiter(
 		config.GetenvInt("AUTH_RATE_LIMIT", 60),
 		config.GetenvDuration("AUTH_RATE_WINDOW_SECONDS", 60),
-	).Limit()
+		log,
+	)
 	r.POST("/auth/register", authLimit, h.register)
 	r.POST("/auth/login", authLimit, h.login)
 	r.POST("/auth/refresh", authLimit, h.refresh)

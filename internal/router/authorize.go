@@ -77,7 +77,7 @@ type authzParams struct {
 	CodeChallenge, CodeChallengeMethod, Nonce         string
 }
 
-func readParams(c *gin.Context, get func(string) string) authzParams {
+func readParams(_ *gin.Context, get func(string) string) authzParams {
 	return authzParams{
 		ResponseType:        get("response_type"),
 		ClientID:            get("client_id"),
