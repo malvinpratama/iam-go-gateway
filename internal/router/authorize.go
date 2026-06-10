@@ -16,6 +16,7 @@ import (
 
 	authv1 "github.com/malvinpratama/iam-go-contracts/gen/auth/v1"
 	"github.com/malvinpratama/iam-go-libs/config"
+	"github.com/malvinpratama/iam-go-gateway/internal/middleware"
 )
 
 // ── browser session (stateless signed cookie) ───────────────
@@ -241,6 +242,34 @@ func (h *handlers) token(c *gin.Context) {
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported_grant_type"})
 	}
+}
+
+// userinfo is the OIDC UserInfo endpoint: returns claims for the bearer token.
+func (h *handlers) userinfo(c *gin.Context) {
+	id := middleware.IdentityOf(c)
+	c.JSON(http.StatusOK, gin.H{"sub": id.UserID, "email": id.Email})
+}
+
+// registerClient registers a new OAuth client (admin only).
+func (h *handlers) registerClient(c *gin.Context) {
+	var body struct {
+		Name         string   `json:"name" binding:"required"`
+		RedirectURIs []string `json:"redirect_uris"`
+		Scopes       []string `json:"scopes"`
+		Confidential bool     `json:"confidential"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	res, err := h.c.Auth.RegisterClient(c.Request.Context(), &authv1.RegisterClientRequest{
+		Name: body.Name, RedirectUris: body.RedirectURIs, Scopes: body.Scopes, IsConfidential: body.Confidential,
+	})
+	if err != nil {
+		writeGRPCError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"client_id": res.GetClientId(), "client_secret": res.GetClientSecret()})
 }
 
 // ── helpers ─────────────────────────────────────────────────
