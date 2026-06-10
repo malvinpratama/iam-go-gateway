@@ -32,6 +32,22 @@ func (a *Authenticator) Require() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing bearer token"})
 			return
 		}
+		// API keys (iamk_...) authenticate via ValidateApiKey; their scopes act
+		// as the caller's permissions. Everything else is a JWT access token.
+		if strings.HasPrefix(token, "iamk_") {
+			res, err := a.auth.ValidateApiKey(c.Request.Context(), &authv1.ValidateApiKeyRequest{ApiKey: token})
+			if err != nil {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid api key"})
+				return
+			}
+			c.Set(identityKey, grpcutil.Identity{
+				UserID:      res.GetUserId(),
+				Email:       res.GetEmail(),
+				Permissions: res.GetScopes(),
+			})
+			c.Next()
+			return
+		}
 		res, err := a.auth.ValidateToken(c.Request.Context(), &authv1.ValidateTokenRequest{AccessToken: token})
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
