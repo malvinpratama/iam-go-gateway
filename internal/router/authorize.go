@@ -15,8 +15,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	authv1 "github.com/malvinpratama/iam-go-contracts/gen/auth/v1"
-	"github.com/malvinpratama/iam-go-libs/config"
 	"github.com/malvinpratama/iam-go-gateway/internal/middleware"
+	"github.com/malvinpratama/iam-go-libs/config"
 )
 
 // ── browser session (stateless signed cookie) ───────────────

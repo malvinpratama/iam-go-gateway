@@ -14,23 +14,23 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	gateway "github.com/malvinpratama/iam-go-gateway"
 	authv1 "github.com/malvinpratama/iam-go-contracts/gen/auth/v1"
 	userv1 "github.com/malvinpratama/iam-go-contracts/gen/user/v1"
-	"github.com/malvinpratama/iam-go-libs/config"
-	"github.com/malvinpratama/iam-go-libs/grpcutil"
+	gateway "github.com/malvinpratama/iam-go-gateway"
 	"github.com/malvinpratama/iam-go-gateway/internal/client"
 	"github.com/malvinpratama/iam-go-gateway/internal/middleware"
+	"github.com/malvinpratama/iam-go-libs/config"
+	"github.com/malvinpratama/iam-go-libs/grpcutil"
 )
 
 // New builds the gin engine with all routes registered.
 func New(clients *client.Clients, log *slog.Logger) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
-	r.Use(otelgin.Middleware("gateway"))   // trace each request + extract context
-	r.Use(middleware.RequestID())          // correlation id
-	r.Use(middleware.Observability(log))   // metrics + access log
-	r.Use(middleware.BodyLimit(1 << 20))   // 1 MiB max request body (DoS guard)
+	r.Use(otelgin.Middleware("gateway")) // trace each request + extract context
+	r.Use(middleware.RequestID())        // correlation id
+	r.Use(middleware.Observability(log)) // metrics + access log
+	r.Use(middleware.BodyLimit(1 << 20)) // 1 MiB max request body (DoS guard)
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Interactive API docs (public): Swagger UI at /docs, spec at /openapi.yaml.
