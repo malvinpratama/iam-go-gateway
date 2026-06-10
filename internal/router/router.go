@@ -3,6 +3,7 @@ package router
 
 import (
 	"context"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	gateway "github.com/malvinpratama/iam-go-gateway"
 	authv1 "github.com/malvinpratama/iam-go-contracts/gen/auth/v1"
 	userv1 "github.com/malvinpratama/iam-go-contracts/gen/user/v1"
 	"github.com/malvinpratama/iam-go-libs/grpcutil"
@@ -30,6 +32,14 @@ func New(clients *client.Clients, log *slog.Logger) *gin.Engine {
 	r.Use(middleware.Observability(log))   // metrics + access log
 	r.Use(middleware.BodyLimit(1 << 20))   // 1 MiB max request body (DoS guard)
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
+
+	// Interactive API docs (public): Swagger UI at /docs, spec at /openapi.yaml.
+	r.GET("/openapi.yaml", func(c *gin.Context) {
+		c.Data(http.StatusOK, "application/yaml", gateway.OpenAPISpec)
+	})
+	if ui, err := fs.Sub(gateway.SwaggerUI, "swaggerui"); err == nil {
+		r.StaticFS("/docs", http.FS(ui))
+	}
 
 	authn := middleware.NewAuthenticator(clients.Auth)
 	h := &handlers{c: clients}
