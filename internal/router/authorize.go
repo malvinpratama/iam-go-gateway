@@ -198,6 +198,51 @@ func (h *handlers) issueCode(c *gin.Context, p authzParams, uid string) {
 	c.Redirect(http.StatusFound, loc)
 }
 
+// clientCreds reads client_id/secret from the form (client_secret_post) or,
+// failing that, HTTP Basic auth (client_secret_basic).
+func clientCreds(c *gin.Context) (string, string) {
+	id, secret := c.PostForm("client_id"), c.PostForm("client_secret")
+	if id == "" {
+		if u, p, ok := c.Request.BasicAuth(); ok {
+			return u, p
+		}
+	}
+	return id, secret
+}
+
+// token is the OAuth2 token endpoint (authorization_code + refresh_token grants).
+func (h *handlers) token(c *gin.Context) {
+	switch c.PostForm("grant_type") {
+	case "authorization_code":
+		id, secret := clientCreds(c)
+		res, err := h.c.Auth.ExchangeAuthorizationCode(c.Request.Context(), &authv1.ExchangeAuthorizationCodeRequest{
+			ClientId: id, ClientSecret: secret, Code: c.PostForm("code"),
+			RedirectUri: c.PostForm("redirect_uri"), CodeVerifier: c.PostForm("code_verifier"),
+		})
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"access_token": res.GetAccessToken(), "id_token": res.GetIdToken(),
+			"refresh_token": res.GetRefreshToken(), "token_type": "Bearer",
+			"expires_in": res.GetExpiresIn(), "scope": res.GetScope(),
+		})
+	case "refresh_token":
+		tp, err := h.c.Auth.Refresh(c.Request.Context(), &authv1.RefreshRequest{RefreshToken: c.PostForm("refresh_token")})
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_grant"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"access_token": tp.GetAccessToken(), "refresh_token": tp.GetRefreshToken(),
+			"token_type": "Bearer", "expires_in": tp.GetExpiresIn(),
+		})
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported_grant_type"})
+	}
+}
+
 // ── helpers ─────────────────────────────────────────────────
 
 func scopesCovered(granted, requested []string) bool {
