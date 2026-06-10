@@ -270,7 +270,7 @@ func (h *handlers) registerClient(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	res, err := h.c.Auth.RegisterClient(c.Request.Context(), &authv1.RegisterClientRequest{
+	res, err := h.c.Auth.RegisterClient(forward(c), &authv1.RegisterClientRequest{
 		Name: body.Name, RedirectUris: body.RedirectURIs, Scopes: body.Scopes, IsConfidential: body.Confidential,
 	})
 	if err != nil {
