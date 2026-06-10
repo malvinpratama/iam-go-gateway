@@ -26,6 +26,10 @@ func main() {
 		log.Error("insecure configuration", "err", err)
 		return
 	}
+	if config.IsProduction() && config.Getenv("SESSION_SECRET", "") == "" {
+		log.Error("SESSION_SECRET must be set in production (signs OIDC browser sessions)")
+		return
+	}
 	if config.IsProduction() {
 		gin.SetMode(gin.ReleaseMode)
 	}
