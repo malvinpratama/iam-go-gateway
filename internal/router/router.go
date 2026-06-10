@@ -46,6 +46,10 @@ func New(clients *client.Clients, log *slog.Logger) *gin.Engine {
 
 	r.GET("/healthz", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "ok"}) })
 
+	// OIDC discovery + JWKS (public) — lets external relying parties verify tokens.
+	r.GET("/.well-known/openid-configuration", h.oidcDiscovery)
+	r.GET("/.well-known/jwks.json", h.jwks)
+
 	// Public auth endpoints — rate limited per IP to slow brute-force.
 	// Tunable via env (defaults 60 req / 60s); lower it (e.g. 5-10/min) in production.
 	authLimit := middleware.NewRateLimiter(
