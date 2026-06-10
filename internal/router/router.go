@@ -76,6 +76,8 @@ func New(clients *client.Clients, log *slog.Logger) *gin.Engine {
 	{
 		auth.POST("/auth/logout", h.logout)
 		auth.GET("/me", h.getIdentity)
+		auth.GET("/userinfo", h.userinfo) // OIDC UserInfo
+		auth.POST("/oauth/clients", middleware.RequirePermission("role:write"), h.registerClient)
 		auth.GET("/users/me", h.getMe)
 		auth.GET("/permissions", middleware.RequirePermission("role:read"), h.listPermissions)
 		auth.GET("/audit", middleware.RequirePermission("audit:read"), h.listAudit)
