@@ -39,6 +39,10 @@ func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
 // Limit is gin middleware enforcing the per-IP rate limit.
 func (rl *RateLimiter) Limit() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if rl.limit <= 0 { // 0 (or negative) disables the limiter
+			c.Next()
+			return
+		}
 		ip := c.ClientIP()
 		now := time.Now()
 

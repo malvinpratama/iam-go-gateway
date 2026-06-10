@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -18,6 +17,7 @@ import (
 	gateway "github.com/malvinpratama/iam-go-gateway"
 	authv1 "github.com/malvinpratama/iam-go-contracts/gen/auth/v1"
 	userv1 "github.com/malvinpratama/iam-go-contracts/gen/user/v1"
+	"github.com/malvinpratama/iam-go-libs/config"
 	"github.com/malvinpratama/iam-go-libs/grpcutil"
 	"github.com/malvinpratama/iam-go-gateway/internal/client"
 	"github.com/malvinpratama/iam-go-gateway/internal/middleware"
@@ -47,8 +47,11 @@ func New(clients *client.Clients, log *slog.Logger) *gin.Engine {
 	r.GET("/healthz", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "ok"}) })
 
 	// Public auth endpoints — rate limited per IP to slow brute-force.
-	// Demo value; lower it (e.g. 5-10/min) in production.
-	authLimit := middleware.NewRateLimiter(60, time.Minute).Limit()
+	// Tunable via env (defaults 60 req / 60s); lower it (e.g. 5-10/min) in production.
+	authLimit := middleware.NewRateLimiter(
+		config.GetenvInt("AUTH_RATE_LIMIT", 60),
+		config.GetenvDuration("AUTH_RATE_WINDOW_SECONDS", 60),
+	).Limit()
 	r.POST("/auth/register", authLimit, h.register)
 	r.POST("/auth/login", authLimit, h.login)
 	r.POST("/auth/refresh", authLimit, h.refresh)
