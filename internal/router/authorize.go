@@ -170,6 +170,13 @@ func (h *handlers) authorizeConsent(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/authorize?"+p.values().Encode())
 		return
 	}
+	// Re-validate client + redirect_uri: never issue/redirect to an unvalidated URI
+	// just because it was posted back (open-redirect / code-interception guard).
+	client, err := h.c.Auth.GetClient(c.Request.Context(), &authv1.GetClientRequest{ClientId: p.ClientID})
+	if err != nil || !contains(client.GetRedirectUris(), p.RedirectURI) {
+		c.Data(http.StatusBadRequest, "text/html; charset=utf-8", []byte("invalid client or redirect_uri"))
+		return
+	}
 	if c.PostForm("action") != "allow" {
 		redirectError(c, p, "access_denied")
 		return
@@ -213,6 +220,7 @@ func clientCreds(c *gin.Context) (string, string) {
 
 // token is the OAuth2 token endpoint (authorization_code + refresh_token grants).
 func (h *handlers) token(c *gin.Context) {
+	c.Header("Cache-Control", "no-store") // OIDC: token responses must not be cached
 	switch c.PostForm("grant_type") {
 	case "authorization_code":
 		id, secret := clientCreds(c)
