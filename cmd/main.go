@@ -10,11 +10,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/malvinpratama/iam-go-gateway/internal/client"
+	"github.com/malvinpratama/iam-go-gateway/internal/router"
 	"github.com/malvinpratama/iam-go-libs/config"
 	"github.com/malvinpratama/iam-go-libs/logger"
 	"github.com/malvinpratama/iam-go-libs/obs"
-	"github.com/malvinpratama/iam-go-gateway/internal/client"
-	"github.com/malvinpratama/iam-go-gateway/internal/router"
 )
 
 func main() {
