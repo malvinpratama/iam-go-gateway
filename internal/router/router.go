@@ -67,6 +67,7 @@ func New(clients *client.Clients, log *slog.Logger) *gin.Engine {
 	)
 	r.POST("/auth/register", authLimit, h.register)
 	r.POST("/auth/login", authLimit, h.login)
+	r.POST("/auth/login/totp", authLimit, h.loginTotp) // complete a 2FA login
 	r.POST("/auth/refresh", authLimit, h.refresh)
 	r.POST("/auth/verify-email/request", authLimit, h.requestEmailVerification)
 	r.POST("/auth/verify-email", authLimit, h.verifyEmail)
@@ -80,6 +81,16 @@ func New(clients *client.Clients, log *slog.Logger) *gin.Engine {
 		auth.POST("/auth/logout", h.logout)
 		auth.GET("/me", h.getIdentity)
 		auth.GET("/userinfo", h.userinfo) // OIDC UserInfo
+		// 2FA (self-service)
+		auth.POST("/auth/2fa/enroll", h.enrollTotp)
+		auth.POST("/auth/2fa/activate", h.activateTotp)
+		auth.POST("/auth/2fa/disable", h.disableTotp)
+		// API keys (self-service): scoped programmatic credentials
+		auth.POST("/api-keys", h.createApiKey)
+		auth.GET("/api-keys", h.listApiKeys)
+		auth.DELETE("/api-keys/:id", h.revokeApiKey)
+		// Restore a soft-deleted user (admin)
+		auth.POST("/users/:id/restore", middleware.RequirePermission("user:delete"), h.restoreUser)
 		auth.POST("/oauth/clients", middleware.RequirePermission("role:write"), h.registerClient)
 		auth.GET("/users/me", h.getMe)
 		auth.GET("/permissions", middleware.RequirePermission("role:read"), h.listPermissions)
@@ -400,13 +411,15 @@ func (h *handlers) updateUser(c *gin.Context) {
 
 func (h *handlers) deleteUser(c *gin.Context) {
 	target := c.Param("id")
-	// Delete the identity (credentials, roles, refresh tokens). The matching
-	// profile is dropped asynchronously via a UserDeleted event.
-	if _, err := h.c.Auth.DeleteUser(forward(c), &authv1.DeleteUserRequest{UserId: target}); err != nil {
+	hard := c.Query("hard") == "true"
+	// Soft-delete by default (recoverable via /users/:id/restore); ?hard=true
+	// removes the identity permanently. The matching profile is updated
+	// asynchronously via a UserDeleted event.
+	if _, err := h.c.Auth.DeleteUser(forward(c), &authv1.DeleteUserRequest{UserId: target, Hard: hard}); err != nil {
 		writeGRPCError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true})
+	c.JSON(http.StatusOK, gin.H{"success": true, "hard": hard})
 }
 
 // ── RBAC ────────────────────────────────────────────────────
@@ -521,6 +534,14 @@ func forward(c *gin.Context) context.Context {
 }
 
 func tokenPairJSON(tp *authv1.TokenPair) gin.H {
+	// 2FA: a password-only login may return a challenge instead of tokens.
+	if tp.GetMfaRequired() {
+		return gin.H{
+			"mfa_required": true,
+			"mfa_token":    tp.GetMfaToken(),
+			"token_type":   tp.GetTokenType(),
+		}
+	}
 	return gin.H{
 		"access_token":  tp.GetAccessToken(),
 		"refresh_token": tp.GetRefreshToken(),
