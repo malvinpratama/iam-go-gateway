@@ -32,6 +32,7 @@ func (h *handlers) oidcDiscovery(c *gin.Context) {
 		"token_endpoint":                        iss + "/token",
 		"userinfo_endpoint":                     iss + "/userinfo",
 		"jwks_uri":                              iss + "/.well-known/jwks.json",
+		"end_session_endpoint":                  iss + "/logout",
 		"response_types_supported":              []string{"code"},
 		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
 		"subject_types_supported":               []string{"public"},
