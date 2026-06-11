@@ -117,6 +117,7 @@ func New(clients *client.Clients, log *slog.Logger) *gin.Engine {
 		auth.DELETE("/roles/:name", middleware.RequirePermission("role:write"), h.deleteRole)
 		auth.POST("/roles/:name/permissions", middleware.RequirePermission("role:write"), h.grantPermission)
 		auth.DELETE("/roles/:name/permissions/:perm", middleware.RequirePermission("role:write"), h.revokePermission)
+		auth.GET("/users/:id/roles", middleware.RequirePermission("role:read"), h.getUserRoleAssignments)
 		auth.POST("/users/:id/roles", middleware.RequirePermission("role:assign"), h.assignRole)
 		auth.POST("/roles/:name/assignments", middleware.RequirePermission("role:assign"), h.assignRoleBulk)
 		auth.DELETE("/users/:id/roles/:role", middleware.RequirePermission("role:assign"), h.revokeRole)
@@ -537,13 +538,14 @@ func (h *handlers) revokePermission(c *gin.Context) {
 
 func (h *handlers) assignRole(c *gin.Context) {
 	var body struct {
-		Role string `json:"role" binding:"required"`
+		Role      string `json:"role" binding:"required"`
+		ProjectID string `json:"project_id"` // empty = tenant-wide
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if _, err := h.c.Auth.AssignRole(forward(c), &authv1.AssignRoleRequest{UserId: c.Param("id"), RoleName: body.Role}); err != nil {
+	if _, err := h.c.Auth.AssignRole(forward(c), &authv1.AssignRoleRequest{UserId: c.Param("id"), RoleName: body.Role, ProjectId: body.ProjectID}); err != nil {
 		writeGRPCError(c, err)
 		return
 	}
@@ -551,11 +553,27 @@ func (h *handlers) assignRole(c *gin.Context) {
 }
 
 func (h *handlers) revokeRole(c *gin.Context) {
-	if _, err := h.c.Auth.RevokeRole(forward(c), &authv1.RevokeRoleRequest{UserId: c.Param("id"), RoleName: c.Param("role")}); err != nil {
+	// ?project_id=… selects the project-scoped assignment; omit for tenant-wide.
+	if _, err := h.c.Auth.RevokeRole(forward(c), &authv1.RevokeRoleRequest{UserId: c.Param("id"), RoleName: c.Param("role"), ProjectId: c.Query("project_id")}); err != nil {
 		writeGRPCError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// getUserRoleAssignments lists a user's role assignments in the active tenant
+// (role + project scope), so the console can show + revoke them precisely.
+func (h *handlers) getUserRoleAssignments(c *gin.Context) {
+	res, err := h.c.Auth.GetUserRoleAssignments(forward(c), &authv1.GetUserRoleAssignmentsRequest{UserId: c.Param("id")})
+	if err != nil {
+		writeGRPCError(c, err)
+		return
+	}
+	out := make([]gin.H, 0, len(res.GetAssignments()))
+	for _, a := range res.GetAssignments() {
+		out = append(out, gin.H{"role": a.GetRole(), "project_id": a.GetProjectId(), "project_slug": a.GetProjectSlug()})
+	}
+	c.JSON(http.StatusOK, gin.H{"assignments": out})
 }
 
 // ── helpers ─────────────────────────────────────────────────
