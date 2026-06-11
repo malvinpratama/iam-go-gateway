@@ -154,7 +154,32 @@ func (h *handlers) authorizeLogin(c *gin.Context) {
 		c.Data(http.StatusUnauthorized, "text/html; charset=utf-8", []byte(loginPage(p, "Invalid email or password")))
 		return
 	}
-	vt, err := h.c.Auth.ValidateToken(c.Request.Context(), &authv1.ValidateTokenRequest{AccessToken: tp.GetAccessToken()})
+	// 2FA: the password step alone isn't enough — prompt for a TOTP/recovery code.
+	if tp.GetMfaRequired() {
+		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(totpPage(p, tp.GetMfaToken(), "")))
+		return
+	}
+	h.finishAuthorizeLogin(c, p, tp.GetAccessToken())
+}
+
+// authorizeTotp completes a 2FA login inside the OIDC authorize flow.
+func (h *handlers) authorizeTotp(c *gin.Context) {
+	p := readParams(c, c.PostForm)
+	mfaToken := c.PostForm("mfa_token")
+	tp, err := h.c.Auth.LoginTotp(c.Request.Context(), &authv1.LoginTotpRequest{
+		MfaToken: mfaToken, Code: c.PostForm("code"),
+	})
+	if err != nil {
+		c.Data(http.StatusUnauthorized, "text/html; charset=utf-8", []byte(totpPage(p, mfaToken, "Invalid or expired code")))
+		return
+	}
+	h.finishAuthorizeLogin(c, p, tp.GetAccessToken())
+}
+
+// finishAuthorizeLogin resolves the identity from a freshly issued access token,
+// sets the browser session, and returns to the authorize endpoint.
+func (h *handlers) finishAuthorizeLogin(c *gin.Context, p authzParams, accessToken string) {
+	vt, err := h.c.Auth.ValidateToken(c.Request.Context(), &authv1.ValidateTokenRequest{AccessToken: accessToken})
 	if err != nil {
 		c.Data(http.StatusInternalServerError, "text/html; charset=utf-8", []byte("login failed"))
 		return
@@ -323,7 +348,7 @@ const pageCSS = `<style>body{font-family:system-ui,sans-serif;background:#0f172a
 .card{background:#1e293b;padding:2rem 2.25rem;border-radius:14px;width:340px;box-shadow:0 10px 40px rgba(0,0,0,.4)}
 h1{font-size:1.15rem;margin:0 0 .25rem}p{color:#94a3b8;font-size:.85rem;margin:.25rem 0 1.25rem}
 label{display:block;font-size:.8rem;margin:.6rem 0 .2rem;color:#cbd5e1}
-input[type=email],input[type=password]{width:100%;padding:.6rem .7rem;border:1px solid #334155;border-radius:8px;background:#0f172a;color:#e2e8f0;box-sizing:border-box}
+input[type=email],input[type=password],input[type=text]{width:100%;padding:.6rem .7rem;border:1px solid #334155;border-radius:8px;background:#0f172a;color:#e2e8f0;box-sizing:border-box}
 button{margin-top:1.1rem;width:100%;padding:.65rem;border:0;border-radius:8px;background:#6366f1;color:#fff;font-weight:600;cursor:pointer}
 button.ghost{background:#334155}.row{display:flex;gap:.6rem}.err{color:#f87171;font-size:.8rem;margin:.4rem 0}
 .scopes{list-style:none;padding:0;margin:.5rem 0}.scopes li{padding:.35rem 0;border-bottom:1px solid #334155;font-size:.9rem}</style>`
@@ -339,6 +364,19 @@ func loginPage(p authzParams, errMsg string) string {
 <label>Email</label><input type="email" name="email" required autofocus>
 <label>Password</label><input type="password" name="password" required>
 ` + hiddenFields(p) + `<button type="submit">Sign in</button></form></body></html>`
+}
+
+func totpPage(p authzParams, mfaToken, errMsg string) string {
+	e := ""
+	if errMsg != "" {
+		e = `<div class="err">` + html.EscapeString(errMsg) + `</div>`
+	}
+	return `<!doctype html><html><head><meta charset="utf-8"><title>Two-factor · IAM</title>` + pageCSS + `</head><body>
+<form class="card" method="post" action="/authorize/totp">
+<h1>🔐 Two-factor authentication</h1><p>Enter the 6-digit code from your authenticator app (or a recovery code).</p>` + e + `
+<label>Code</label><input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" autofocus required>
+<input type="hidden" name="mfa_token" value="` + html.EscapeString(mfaToken) + `">
+` + hiddenFields(p) + `<button type="submit">Verify</button></form></body></html>`
 }
 
 func consentPage(p authzParams, clientName string) string {
