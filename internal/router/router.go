@@ -83,7 +83,15 @@ func New(clients *client.Clients, log *slog.Logger) *gin.Engine {
 		auth.GET("/me", h.getIdentity)
 		auth.GET("/me/memberships", h.listMemberships) // M6: tenants the caller belongs to
 		auth.POST("/auth/switch", h.switchTenant)      // M6: re-issue token for another tenant
-		auth.GET("/userinfo", h.userinfo)              // OIDC UserInfo
+		// M6.4: tenant / project / member administration.
+		auth.POST("/tenants", middleware.RequirePermission("tenant:write"), h.createTenant)
+		auth.GET("/tenants", middleware.RequirePermission("tenant:read"), h.listTenants)
+		auth.POST("/projects", middleware.RequirePermission("project:write"), h.createProject)
+		auth.GET("/projects", middleware.RequirePermission("project:read"), h.listProjects)
+		auth.GET("/members", middleware.RequirePermission("member:read"), h.listMembers)
+		auth.POST("/members", middleware.RequirePermission("member:write"), h.addMember)
+		auth.DELETE("/members/:userId", middleware.RequirePermission("member:write"), h.removeMember)
+		auth.GET("/userinfo", h.userinfo) // OIDC UserInfo
 		// 2FA (self-service)
 		auth.GET("/auth/2fa", h.totpStatus)
 		auth.POST("/auth/2fa/enroll", h.enrollTotp)
