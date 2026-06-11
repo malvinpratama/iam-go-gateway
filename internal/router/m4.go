@@ -28,6 +28,16 @@ func (h *handlers) loginTotp(c *gin.Context) {
 	c.JSON(http.StatusOK, tokenPairJSON(tp))
 }
 
+// totpStatus reports whether 2FA is active for the caller.
+func (h *handlers) totpStatus(c *gin.Context) {
+	res, err := h.c.Auth.GetTotpStatus(forward(c), &authv1.GetTotpStatusRequest{})
+	if err != nil {
+		writeGRPCError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"enabled": res.GetEnabled()})
+}
+
 // enrollTotp starts 2FA enrollment for the caller (returns secret + recovery codes).
 func (h *handlers) enrollTotp(c *gin.Context) {
 	res, err := h.c.Auth.EnrollTotp(forward(c), &authv1.EnrollTotpRequest{})

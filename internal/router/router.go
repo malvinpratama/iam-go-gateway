@@ -83,6 +83,7 @@ func New(clients *client.Clients, log *slog.Logger) *gin.Engine {
 		auth.GET("/me", h.getIdentity)
 		auth.GET("/userinfo", h.userinfo) // OIDC UserInfo
 		// 2FA (self-service)
+		auth.GET("/auth/2fa", h.totpStatus)
 		auth.POST("/auth/2fa/enroll", h.enrollTotp)
 		auth.POST("/auth/2fa/activate", h.activateTotp)
 		auth.POST("/auth/2fa/disable", h.disableTotp)
