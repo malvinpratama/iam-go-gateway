@@ -135,3 +135,23 @@ func (h *handlers) restoreUser(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
+
+// ── bulk operations ─────────────────────────────────────────
+
+func (h *handlers) assignRoleBulk(c *gin.Context) {
+	var body struct {
+		UserIDs []string `json:"user_ids" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	res, err := h.c.Auth.AssignRoleBulk(forward(c), &authv1.AssignRoleBulkRequest{
+		RoleName: c.Param("name"), UserIds: body.UserIDs,
+	})
+	if err != nil {
+		writeGRPCError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"assigned": res.GetAssigned(), "failed": res.GetFailed()})
+}
