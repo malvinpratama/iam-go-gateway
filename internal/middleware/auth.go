@@ -58,6 +58,8 @@ func (a *Authenticator) Require() gin.HandlerFunc {
 			Email:       res.GetEmail(),
 			Roles:       res.GetRoles(),
 			Permissions: res.GetPermissions(),
+			TenantID:    res.GetTenantId(),
+			ProjectID:   res.GetProjectId(),
 		})
 		c.Next()
 	}
