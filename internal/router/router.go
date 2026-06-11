@@ -363,26 +363,46 @@ func (h *handlers) getUser(c *gin.Context) {
 	c.JSON(http.StatusOK, profileJSON(p))
 }
 
+// listUsers returns the active tenant's directory: its members (from auth)
+// joined with their profiles (one batch GetProfiles call — no N+1). This keeps
+// the user list tenant-scoped so a tenant admin never sees other tenants' users.
 func (h *handlers) listUsers(c *gin.Context) {
-	var q struct {
-		Page     int32  `form:"page"`
-		PageSize int32  `form:"page_size"`
-		Query    string `form:"query"`
-		Deleted  bool   `form:"deleted"`
-	}
-	_ = c.ShouldBindQuery(&q)
-	res, err := h.c.User.ListProfiles(forward(c), &userv1.ListProfilesRequest{Page: q.Page, PageSize: q.PageSize, Query: q.Query, DeletedOnly: q.Deleted})
+	ctx := forward(c)
+	members, err := h.c.Auth.ListMembers(ctx, &authv1.ListMembersRequest{})
 	if err != nil {
 		writeGRPCError(c, err)
 		return
 	}
-	profiles := make([]gin.H, 0, len(res.GetProfiles()))
-	for _, p := range res.GetProfiles() {
-		profiles = append(profiles, profileJSON(p))
+	ids := make([]string, 0, len(members.GetMembers()))
+	emailByID := make(map[string]string, len(members.GetMembers()))
+	statusByID := make(map[string]string, len(members.GetMembers()))
+	for _, m := range members.GetMembers() {
+		ids = append(ids, m.GetUserId())
+		emailByID[m.GetUserId()] = m.GetEmail()
+		statusByID[m.GetUserId()] = m.GetStatus()
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"profiles": profiles, "total": res.GetTotal(), "page": res.GetPage(), "page_size": res.GetPageSize(),
-	})
+	profByID := make(map[string]*userv1.Profile, len(ids))
+	if len(ids) > 0 {
+		profs, err := h.c.User.GetProfiles(ctx, &userv1.GetProfilesRequest{UserIds: ids})
+		if err != nil {
+			writeGRPCError(c, err)
+			return
+		}
+		for _, p := range profs.GetProfiles() {
+			profByID[p.GetUserId()] = p
+		}
+	}
+	out := make([]gin.H, 0, len(ids))
+	for _, id := range ids {
+		row := gin.H{"user_id": id, "email": emailByID[id], "status": statusByID[id]}
+		if p := profByID[id]; p != nil {
+			row["display_name"] = p.GetDisplayName()
+			row["bio"] = p.GetBio()
+			row["created_at"] = p.GetCreatedAt()
+		}
+		out = append(out, row)
+	}
+	c.JSON(http.StatusOK, gin.H{"profiles": out, "total": len(out), "page": 1, "page_size": len(out)})
 }
 
 func (h *handlers) updateUser(c *gin.Context) {
