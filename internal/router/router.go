@@ -53,6 +53,7 @@ func New(clients *client.Clients, log *slog.Logger) *gin.Engine {
 	// OIDC Authorization Code flow (browser): login form, consent, code issuance.
 	r.GET("/authorize", h.authorize)
 	r.POST("/authorize/login", h.authorizeLogin)
+	r.POST("/authorize/totp", h.authorizeTotp) // 2FA step of the browser login
 	r.POST("/authorize/consent", h.authorizeConsent)
 	r.POST("/token", h.token)
 	r.GET("/logout", h.oidcLogout) // OIDC RP-initiated end-session
