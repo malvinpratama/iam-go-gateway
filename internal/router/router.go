@@ -106,6 +106,7 @@ func New(clients *client.Clients, log *slog.Logger) *gin.Engine {
 		auth.POST("/roles/:name/permissions", middleware.RequirePermission("role:write"), h.grantPermission)
 		auth.DELETE("/roles/:name/permissions/:perm", middleware.RequirePermission("role:write"), h.revokePermission)
 		auth.POST("/users/:id/roles", middleware.RequirePermission("role:assign"), h.assignRole)
+		auth.POST("/roles/:name/assignments", middleware.RequirePermission("role:assign"), h.assignRoleBulk)
 		auth.DELETE("/users/:id/roles/:role", middleware.RequirePermission("role:assign"), h.revokeRole)
 	}
 	return r
@@ -355,9 +356,10 @@ func (h *handlers) listUsers(c *gin.Context) {
 		Page     int32  `form:"page"`
 		PageSize int32  `form:"page_size"`
 		Query    string `form:"query"`
+		Deleted  bool   `form:"deleted"`
 	}
 	_ = c.ShouldBindQuery(&q)
-	res, err := h.c.User.ListProfiles(forward(c), &userv1.ListProfilesRequest{Page: q.Page, PageSize: q.PageSize, Query: q.Query})
+	res, err := h.c.User.ListProfiles(forward(c), &userv1.ListProfilesRequest{Page: q.Page, PageSize: q.PageSize, Query: q.Query, DeletedOnly: q.Deleted})
 	if err != nil {
 		writeGRPCError(c, err)
 		return
