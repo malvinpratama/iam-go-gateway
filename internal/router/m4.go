@@ -150,14 +150,15 @@ func (h *handlers) restoreUser(c *gin.Context) {
 
 func (h *handlers) assignRoleBulk(c *gin.Context) {
 	var body struct {
-		UserIDs []string `json:"user_ids" binding:"required"`
+		UserIDs   []string `json:"user_ids" binding:"required"`
+		ProjectID string   `json:"project_id"` // empty = tenant-wide
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	res, err := h.c.Auth.AssignRoleBulk(forward(c), &authv1.AssignRoleBulkRequest{
-		RoleName: c.Param("name"), UserIds: body.UserIDs,
+		RoleName: c.Param("name"), UserIds: body.UserIDs, ProjectId: body.ProjectID,
 	})
 	if err != nil {
 		writeGRPCError(c, err)
