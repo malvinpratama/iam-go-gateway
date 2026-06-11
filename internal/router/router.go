@@ -81,7 +81,9 @@ func New(clients *client.Clients, log *slog.Logger) *gin.Engine {
 	{
 		auth.POST("/auth/logout", h.logout)
 		auth.GET("/me", h.getIdentity)
-		auth.GET("/userinfo", h.userinfo) // OIDC UserInfo
+		auth.GET("/me/memberships", h.listMemberships) // M6: tenants the caller belongs to
+		auth.POST("/auth/switch", h.switchTenant)      // M6: re-issue token for another tenant
+		auth.GET("/userinfo", h.userinfo)              // OIDC UserInfo
 		// 2FA (self-service)
 		auth.GET("/auth/2fa", h.totpStatus)
 		auth.POST("/auth/2fa/enroll", h.enrollTotp)
