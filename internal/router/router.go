@@ -356,7 +356,28 @@ func (h *handlers) listPermissions(c *gin.Context) {
 }
 
 func (h *handlers) getUser(c *gin.Context) {
-	p, err := h.c.User.GetProfile(forward(c), &userv1.GetProfileRequest{UserId: c.Param("id")})
+	id := c.Param("id")
+	// Tenant-scope the lookup: a profile is only visible to admins of a tenant the
+	// target belongs to. ListMembers is already scoped to the caller's active
+	// tenant, so an id outside it returns 404 rather than leaking another tenant's
+	// user (its very existence included).
+	members, err := h.c.Auth.ListMembers(forward(c), &authv1.ListMembersRequest{})
+	if err != nil {
+		writeGRPCError(c, err)
+		return
+	}
+	member := false
+	for _, m := range members.GetMembers() {
+		if m.GetUserId() == id {
+			member = true
+			break
+		}
+	}
+	if !member {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+	p, err := h.c.User.GetProfile(forward(c), &userv1.GetProfileRequest{UserId: id})
 	if err != nil {
 		writeGRPCError(c, err)
 		return
