@@ -67,8 +67,8 @@ github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/leodido/go-urn v1.4.0 h1:WT9HwE9SGECu3lg4d/dIA+jxlljEa1/ffXKmRjqdmIQ=
 github.com/leodido/go-urn v1.4.0/go.mod h1:bvxc+MVxLKB4z00jd1z+Dvzr47oO32F/QSNjSBOlFxI=
-github.com/malvinpratama/iam-go-contracts v0.12.0 h1:15rwEOqLptwpJBJ4SscfuPzZxCTU9CpAWPLdddmBG6M=
-github.com/malvinpratama/iam-go-contracts v0.12.0/go.mod h1:AWYPGQrCElFlL9gROJasUpMT1JcAdfpQAiM1QTPBI7k=
+github.com/malvinpratama/iam-go-contracts v0.13.0 h1:N3wF6JDq0ljq+33fxZ3JH7aBX1PloMo87ptp8WxLSFA=
+github.com/malvinpratama/iam-go-contracts v0.13.0/go.mod h1:AWYPGQrCElFlL9gROJasUpMT1JcAdfpQAiM1QTPBI7k=
 github.com/malvinpratama/iam-go-libs v0.11.0 h1:PvElNimqu2+7/vgw9mjTtj7X7nWgVYLJFlFUFDZ3oXA=
 github.com/malvinpratama/iam-go-libs v0.11.0/go.mod h1:IXrVs920bayKvzAy5WJZHM3WLpLOLkm6fCgF39HPu0M=
 github.com/mattn/go-isatty v0.0.22 h1:j8l17JJ9i6VGPUFUYoTUKPSgKe/83EYU2zBC7YNKMw4=
