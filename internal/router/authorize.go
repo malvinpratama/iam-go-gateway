@@ -311,11 +311,27 @@ func (h *handlers) oidcLogout(c *gin.Context) {
 	secure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie(sessionCookie, "", -1, "/", "", secure, true)
-	dest := c.Query("post_logout_redirect_uri")
-	if !strings.HasPrefix(dest, "https://") && !strings.HasPrefix(dest, "http://") {
-		dest = "/" // only allow absolute http(s) targets
+	c.Redirect(http.StatusFound, postLogoutDest(c.Query("post_logout_redirect_uri")))
+}
+
+// postLogoutDest prevents an open redirect off /logout: a same-origin relative
+// path is always fine; an absolute URL is only honored if it exactly matches an
+// entry in OIDC_POST_LOGOUT_REDIRECT_URIS (comma-separated, e.g. the console's
+// post-logout URL). Anything else falls back to "/".
+func postLogoutDest(dest string) string {
+	if dest == "" {
+		return "/"
 	}
-	c.Redirect(http.StatusFound, dest)
+	// Same-origin relative path ("/foo"), but not a scheme-relative "//host".
+	if strings.HasPrefix(dest, "/") && !strings.HasPrefix(dest, "//") {
+		return dest
+	}
+	for _, allowed := range strings.Split(config.Getenv("OIDC_POST_LOGOUT_REDIRECT_URIS", ""), ",") {
+		if a := strings.TrimSpace(allowed); a != "" && a == dest {
+			return dest
+		}
+	}
+	return "/"
 }
 
 // ── helpers ─────────────────────────────────────────────────

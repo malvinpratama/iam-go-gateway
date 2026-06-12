@@ -30,6 +30,7 @@ func New(clients *client.Clients, log *slog.Logger) *gin.Engine {
 	r.Use(otelgin.Middleware("gateway")) // trace each request + extract context
 	r.Use(middleware.RequestID())        // correlation id
 	r.Use(middleware.Observability(log)) // metrics + access log
+	r.Use(middleware.SecurityHeaders())  // nosniff / frame-deny / referrer / HSTS
 	r.Use(middleware.BodyLimit(1 << 20)) // 1 MiB max request body (DoS guard)
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
@@ -44,6 +45,15 @@ func New(clients *client.Clients, log *slog.Logger) *gin.Engine {
 	authn := middleware.NewAuthenticator(clients.Auth)
 	h := &handlers{c: clients}
 
+	// Per-IP brute-force limiter. Redis-backed (shared across replicas) when
+	// REDIS_URL is set, else in-memory; tunable via env (defaults 60 req / 60s),
+	// 0 disables. Created up front so the OIDC browser login/2FA routes share it.
+	authLimit := middleware.NewAuthLimiter(
+		config.GetenvInt("AUTH_RATE_LIMIT", 60),
+		config.GetenvDuration("AUTH_RATE_WINDOW_SECONDS", 60),
+		log,
+	)
+
 	r.GET("/healthz", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "ok"}) })
 
 	// OIDC discovery + JWKS (public) — lets external relying parties verify tokens.
@@ -51,21 +61,16 @@ func New(clients *client.Clients, log *slog.Logger) *gin.Engine {
 	r.GET("/.well-known/jwks.json", h.jwks)
 
 	// OIDC Authorization Code flow (browser): login form, consent, code issuance.
+	// The credential-checking steps are rate-limited like the JSON auth endpoints
+	// so the browser flow isn't an unthrottled password/TOTP oracle.
 	r.GET("/authorize", h.authorize)
-	r.POST("/authorize/login", h.authorizeLogin)
-	r.POST("/authorize/totp", h.authorizeTotp) // 2FA step of the browser login
+	r.POST("/authorize/login", authLimit, h.authorizeLogin) // password oracle — rate limited
+	r.POST("/authorize/totp", authLimit, h.authorizeTotp)   // 2FA oracle — rate limited
 	r.POST("/authorize/consent", h.authorizeConsent)
-	r.POST("/token", h.token)
+	r.POST("/token", h.token)      // back-channel (client_secret/PKCE); not a per-IP brute target
 	r.GET("/logout", h.oidcLogout) // OIDC RP-initiated end-session
 
-	// Public auth endpoints — rate limited per IP to slow brute-force. Redis-backed
-	// (shared across replicas) when REDIS_URL is set, else in-memory. Tunable via
-	// env (defaults 60 req / 60s); 0 disables.
-	authLimit := middleware.NewAuthLimiter(
-		config.GetenvInt("AUTH_RATE_LIMIT", 60),
-		config.GetenvDuration("AUTH_RATE_WINDOW_SECONDS", 60),
-		log,
-	)
+	// Public auth endpoints — rate limited per IP to slow brute-force.
 	r.POST("/auth/register", authLimit, h.register)
 	r.POST("/auth/login", authLimit, h.login)
 	r.POST("/auth/login/totp", authLimit, h.loginTotp) // complete a 2FA login
@@ -648,6 +653,7 @@ func contains(s []string, v string) bool {
 func writeGRPCError(c *gin.Context, err error) {
 	st, _ := status.FromError(err)
 	httpCode := http.StatusInternalServerError
+	mapped := true
 	switch st.Code() {
 	case codes.InvalidArgument:
 		httpCode = http.StatusBadRequest
@@ -661,6 +667,16 @@ func writeGRPCError(c *gin.Context, err error) {
 		httpCode = http.StatusConflict
 	case codes.FailedPrecondition:
 		httpCode = http.StatusConflict
+	default:
+		mapped = false
 	}
-	c.JSON(httpCode, gin.H{"error": st.Message()})
+	// Only surface the service's message for codes we deliberately map to a 4xx
+	// (those messages are written for clients). For Internal/Unknown/Unavailable
+	// and friends, return a generic message so a wrapped SQL/driver/connection
+	// error can't leak schema or infra detail; the detail is already logged.
+	msg := st.Message()
+	if !mapped {
+		msg = "internal error"
+	}
+	c.JSON(httpCode, gin.H{"error": msg})
 }
