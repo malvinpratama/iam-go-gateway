@@ -25,16 +25,26 @@ func NewAuthLimiter(limit int, window time.Duration, log *slog.Logger) gin.Handl
 		return NewRateLimiter(limit, window).Limit()
 	}
 	log.Info("rate limiter: redis-backed (shared across replicas)")
-	return (&redisLimiter{rdb: redis.NewClient(opt), limit: limit, window: window, log: log}).Limit()
+	// Keep a local in-memory limiter as the fallback for Redis errors, so a Redis
+	// outage degrades to per-instance limiting instead of disabling limiting
+	// entirely — a brute-force can't ride out a Redis blip.
+	return (&redisLimiter{
+		rdb:      redis.NewClient(opt),
+		limit:    limit,
+		window:   window,
+		log:      log,
+		fallback: NewRateLimiter(limit, window).Limit(),
+	}).Limit()
 }
 
 // redisLimiter is a per-IP fixed-window limiter whose counters live in Redis, so
 // the limit is enforced consistently no matter which replica serves a request.
 type redisLimiter struct {
-	rdb    *redis.Client
-	limit  int
-	window time.Duration
-	log    *slog.Logger
+	rdb      *redis.Client
+	limit    int
+	window   time.Duration
+	log      *slog.Logger
+	fallback gin.HandlerFunc // in-memory limiter used when Redis errors
 }
 
 // atomic INCR + first-write EXPIRE.
@@ -58,8 +68,11 @@ func (rl *redisLimiter) Limit() gin.HandlerFunc {
 		key := "rl:" + c.ClientIP() + ":" + strconv.FormatInt(bucket, 10)
 		n, err := incrExpire.Run(c.Request.Context(), rl.rdb, []string{key}, secs).Int64()
 		if err != nil {
-			rl.log.Warn("rate limiter: redis error, allowing request (fail-open)", "err", err)
-			c.Next()
+			// Fail closed-ish: fall back to the local in-memory limiter rather than
+			// waving the request through, so a Redis outage can't open a
+			// brute-force window.
+			rl.log.Warn("rate limiter: redis error, falling back to in-memory limiter", "err", err)
+			rl.fallback(c)
 			return
 		}
 		if n > int64(rl.limit) {
