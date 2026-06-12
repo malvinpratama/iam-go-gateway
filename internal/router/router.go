@@ -85,6 +85,7 @@ func New(clients *client.Clients, log *slog.Logger) *gin.Engine {
 	auth.Use(authn.Require())
 	{
 		auth.POST("/auth/logout", h.logout)
+		auth.POST("/auth/password", authLimit, h.changePassword) // self-service password change
 		auth.GET("/me", h.getIdentity)
 		auth.GET("/me/memberships", h.listMemberships) // M6: tenants the caller belongs to
 		auth.POST("/auth/switch", h.switchTenant)      // M6: re-issue token for another tenant
@@ -275,6 +276,24 @@ func (h *handlers) resetPassword(c *gin.Context) {
 		return
 	}
 	if _, err := h.c.Auth.ResetPassword(c.Request.Context(), &authv1.ResetPasswordRequest{Token: body.Token, NewPassword: body.NewPassword}); err != nil {
+		writeGRPCError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// changePassword is the authenticated self-service password change; forward(c)
+// carries the caller identity so the auth service knows whose password to rotate.
+func (h *handlers) changePassword(c *gin.Context) {
+	var body struct {
+		OldPassword string `json:"old_password" binding:"required"`
+		NewPassword string `json:"new_password" binding:"required,min=8"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if _, err := h.c.Auth.ChangePassword(forward(c), &authv1.ChangePasswordRequest{OldPassword: body.OldPassword, NewPassword: body.NewPassword}); err != nil {
 		writeGRPCError(c, err)
 		return
 	}
